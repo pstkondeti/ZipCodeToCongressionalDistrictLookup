@@ -1,5 +1,5 @@
 var finder = require('congressional-district-finder');
-const csv = require('csv-parser');
+const csvParser = require('csv-parser');
 const fs = require('fs');
 const createCsvWriter = require('csv-writer').createArrayCsvWriter;
 
@@ -48,22 +48,23 @@ const stateDistrictsList = {
   'WI': ['WI-1', 'WI-2', 'WI-3', 'WI-4', 'WI-5', 'WI-6', 'WI-7', 'WI-8'],
 };
 
-async function districtLookUp (geopoint, state) {
+async function geopointToDistrict (geopoint, state) {
   if (geopoint === undefined) {
+    console.log('Invalid Zip Code');
     return 'Invalid Zip Code';
   } else {
     const geoSplit = geopoint.split(',')
     const latitude = geoSplit[0];
     const longitude = geoSplit[1];
-    var temp = 'No Match';
+    var matchFlag = 'No Match';
     districts = stateDistrictsList[state];
     if (districts !== undefined) {
       var j;
-      for (j = 0; (j < districts.length) && (temp == 'No Match'); j++) {
-        temp = await finder.checkLatLngInDistrict(latitude, longitude, districts[j])
+      for (j = 0; (j < districts.length) && (matchFlag == 'No Match'); j++) {
+        matchFlag = await finder.checkLatLngInDistrict(latitude, longitude, districts[j])
         .then(function (result) {
           if (result.isMatched) {
-            console.log('isMatched');
+            console.log('Found a match');
             return result.district.districtCode;
           } else {
             return 'No Match';
@@ -74,22 +75,22 @@ async function districtLookUp (geopoint, state) {
         });
       }
     }
-    return temp;
+    return matchFlag;
   }
 }
 
-async function zipGeopointMap () {
+async function zipCodeToDistrict () {
   const zipGeopoint = [];
   const MoCData = [];
   const zipCodeFile = fs.createReadStream('./data/us-zip-code-latitude-and-longitude.csv');
   const MoCSignUpsFile = fs.createReadStream('./data/test data.csv');
-  zipCodeFile.pipe(csv({ separator: ';' }))
+  zipCodeFile.pipe(csvParser({ separator: ';' }))
     .on('data', (row) => {
       const { Zip, geopoint } = row;
       zipGeopoint[Zip] = geopoint;
     })
     .on('end', async () => {
-      MoCSignUpsFile.pipe(csv())
+      MoCSignUpsFile.pipe(csvParser())
       .on('data', (row) => {
         const { Email } = row;
         const zipCode = row['Zip/Postal Code'];
@@ -103,7 +104,7 @@ async function zipGeopointMap () {
         for (i = 0; i < MoCData.length; i++) {
           const state = MoCData[i][3];
           const zipCode = MoCData[i][2];
-          MoCData[i].push(await districtLookUp(zipGeopoint[zipCode], state));
+          MoCData[i].push(await geopointToDistrict(zipGeopoint[zipCode], state));
         }
         const csvWriter = createCsvWriter({
           header: ['Name', 'Email', 'Zip Code', 'State', 'District'],
@@ -117,5 +118,5 @@ async function zipGeopointMap () {
     });
 }
 
-zipGeopointMap();
+zipCodeToDistrict();
 
